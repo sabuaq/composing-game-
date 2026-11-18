@@ -221,6 +221,8 @@ dialog::backdrop { background: rgba(0, 0, 0, .55); }
 .item .kind em { font-style: normal; font-size: 10px; margin-left: 6px; color: var(--accent); border: 1px solid #3b5a42; border-radius: 4px; padding: 0 4px; }
 .item .pin { filter: grayscale(1); opacity: .45; }
 .item .pin.on { filter: none; opacity: 1; }
+.item .exclude { filter: grayscale(1); opacity: .35; font-size: 12px; }
+.item .exclude:hover:not(:disabled) { filter: none; opacity: 1; }
 .pick-list { max-height: 50vh; overflow: auto; margin: 10px 0; border: 1px solid var(--line); border-radius: 8px; padding: 4px; }
 .pick-row { display: flex; gap: 8px; align-items: center; padding: 5px 8px; border-radius: 6px; cursor: pointer; }
 .pick-row:hover { background: var(--panel-2); }

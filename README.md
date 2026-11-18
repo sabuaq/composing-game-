@@ -18,6 +18,7 @@ Windows 用のデスクトップアプリ（Electron）です。画面は日本�
 - **一部だけ自分で指定**：「サンプルパックだけ決めて、残りはランダム」のように、決めたい項目だけ指定できます。お題の 📌 で固定することもできます。
 - **エフェクトを種類ごとに**：「全部からランダム」のほか、「コンプから1つ・EQから1つ・リバーブから1つ」のように種類ごとに出せます（コンプ / EQ / リバーブ / ディレイ / 歪み / フィルター / モジュレーション / ステレオ / グリッチ など12種類）。
 - **引き直し**：気に入らない項目は ↻ で1つずつ引き直せます。
+- **今後出さない**：出てきたサンプルパック・音源・エフェクトを 🚫 でその場で除外できます（別のものに入れ替わり、引き直し回数は減りません）。ライブラリ画面でまとめて外したり戻したりもできます。
 - **タイマーと小窓**：スタートで計測開始。「小さく表示」でDAWの横に置ける小さな窓（常に手前）になります。時間切れで音が鳴ります。
 - **履歴**：完成したかは自己申告です。★の自己評価とメモをつけて記録でき、挑戦回数・クリア回数・合計時間などを見られます。最近出た素材は出にくくなります。
 
@@ -73,6 +74,7 @@ A Windows desktop app built with Electron. The interface can be switched between
 - **Choose some items yourself**: e.g. pick the sample pack and leave everything else random. You can also pin (📌) an item from a challenge to keep it.
 - **Effects by type**: draw from all effects, or one per type, such as one compressor, one EQ and one reverb. There are 12 types: compressor, EQ, reverb, delay, distortion, filter, modulation, stereo, glitch and more.
 - **Rerolls**: reroll a single item with ↻.
+- **Don't show again**: exclude a sample pack, instrument or effect right from the challenge with 🚫. It's replaced on the spot and doesn't use a reroll. You can also exclude or restore items in bulk in the Library tab.
 - **Timer and mini window**: press Start to begin. "Mini window" shrinks the app to a small always-on-top window you can keep next to your DAW. A sound plays when time is up.
 - **History**: you decide whether you finished. Rate yourself with stars, add notes, and see your total tries, clears and time. Recently used items show up less often.
 

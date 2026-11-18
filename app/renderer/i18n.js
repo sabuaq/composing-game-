@@ -59,6 +59,9 @@ const I18N = {
     'item.fixed': '指定', 'item.open': '開く', 'item.openTitle': 'フォルダを開く',
     'item.unpin': '指定を外す', 'item.pin': '次からも固定する（指定に入れる）', 'item.reroll': 'これだけ引き直す',
     'item.minutes': '{n}分',
+    'item.exclude': '今後出さない（ライブラリで外す）',
+    'item.excluded': '「{name}」を今後出さないようにしました（ライブラリで戻せます）',
+    'item.excludedNone': '「{name}」を外しました。ほかの候補がないので、この枠はなしになります',
     'reroll.unlimited': '引き直し：無制限', 'reroll.left': '引き直し：残り{n}回',
 
     'timer.over': '時間切れ（このまま続けてもOK）', 'timer.left': '残り時間 / 制限 {n}分', 'timer.elapsed': '経過時間',
@@ -161,6 +164,9 @@ const I18N = {
     'item.fixed': 'chosen', 'item.open': 'Open', 'item.openTitle': 'Open folder',
     'item.unpin': 'Unpin', 'item.pin': 'Pin (keep it for next time)', 'item.reroll': 'Reroll this one',
     'item.minutes': '{n} min',
+    'item.exclude': "Don't show again (exclude in Library)",
+    'item.excluded': 'Excluded "{name}" (you can turn it back on in the Library)',
+    'item.excludedNone': 'Excluded "{name}". No other candidates, so this slot was removed',
     'reroll.unlimited': 'Rerolls: unlimited', 'reroll.left': 'Rerolls left: {n}',
 
     'timer.over': "Time's up (you can keep going)", 'timer.left': 'Time left / limit {n} min', 'timer.elapsed': 'Elapsed',

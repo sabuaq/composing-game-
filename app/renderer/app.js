@@ -230,8 +230,9 @@ function drawChallenge() {
   renderChallenge();
 }
 
-function rerollItem(index) {
-  if (game.rerollsLeft <= 0) return;
+// free = 引き直し回数を使わない（「今後出さない」で入れ替える時）
+function rerollItem(index, free = false) {
+  if (!free && game.rerollsLeft <= 0) return;
   const it = game.challenge.items[index];
   if (it.fixed) return;
   const cfg = currentConfig();
@@ -260,8 +261,36 @@ function rerollItem(index) {
   }
   if (!next) return toast(t('warn.noOther'));
   game.challenge.items[index] = next;
-  game.rerollsLeft -= 1;
+  if (!free) game.rerollsLeft -= 1;
   renderChallenge();
+}
+
+// ---------- 今後出さない ----------
+// お題の素材がライブラリのどれかを探す（自分で名前を追加したものは見つからない）
+function libraryEntry(it) {
+  if (it.kind === 'pack') return library.packs.find((p) => p.path === it.path) || library.packs.find((p) => p.name === it.name);
+  if (it.kind === 'instrument' || it.kind === 'effect') return library.plugins.find((p) => p.name === it.name);
+  return null;
+}
+function excludeItem(index) {
+  const it = game.challenge.items[index];
+  const entry = libraryEntry(it);
+  if (!entry) return;
+  if (it.kind === 'pack') settings.packOverrides[entry.key] = false;
+  else setPluginOverride(entry.key, { enabled: false });
+  // 指定に入っていたら外す
+  settings.fixed[it.kind] = settings.fixed[it.kind].filter((c) => c.name !== it.name);
+  it.fixed = false;
+  saveSettings();
+  // その場で別のものに入れ替える（引き直し回数は使わない）。候補がなければその枠を消す
+  rerollItem(index, true);
+  if (game.challenge.items[index] === it) {
+    game.challenge.items.splice(index, 1);
+    toast(t('item.excludedNone', { name: it.name }));
+    renderChallenge();
+  } else {
+    toast(t('item.excluded', { name: it.name }));
+  }
 }
 
 // 引いたお題の項目を📌で「指定」に入れる／外す（次に引く時もそのまま出る）
@@ -728,6 +757,7 @@ function renderChallenge() {
       ${REROLLABLE.has(it.kind) ? `
         <button class="ghost pin ${it.fixed ? 'on' : ''}" data-pin="${i}" title="${it.fixed ? t('item.unpin') : t('item.pin')}">📌</button>
         <button class="ghost reroll" data-reroll="${i}" ${!canReroll || game.rerollsLeft <= 0 || it.fixed ? 'disabled' : ''} title="${t('item.reroll')}">↻</button>` : ''}
+      ${libraryEntry(it) ? `<button class="ghost exclude" data-exclude="${i}" ${canReroll ? '' : 'disabled'} title="${t('item.exclude')}">🚫</button>` : ''}
     </li>`).join('') +
     (ch.minutes ? `<li class="item kind-time"><span class="kind">${kindName('time')}</span><span class="name">${t('item.minutes', { n: ch.minutes })}</span></li>` : '');
 
@@ -749,6 +779,8 @@ $('itemList').addEventListener('click', (e) => {
   if (r) return rerollItem(+r.dataset.reroll);
   const pin = e.target.closest('[data-pin]');
   if (pin) return pinItem(+pin.dataset.pin);
+  const ex = e.target.closest('[data-exclude]');
+  if (ex) return excludeItem(+ex.dataset.exclude);
   const o = e.target.closest('[data-open]');
   if (o) window.api.openPath(game.challenge.items[+o.dataset.open].path);
 });
