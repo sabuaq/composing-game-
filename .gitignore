@@ -1,0 +1,4 @@
+# 自分の設定・ライブラリ・履歴（PCごとに作られる）
+data/
+node_modules/
+*.tmp

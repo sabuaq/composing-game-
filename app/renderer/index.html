@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'">
+  <title>作曲練習ゲーム</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="top">
+    <div class="brand">作曲練習ゲーム</div>
+    <nav class="tabs">
+      <button data-tab="play" class="active">お題</button>
+      <button data-tab="library">ライブラリ</button>
+      <button data-tab="history">履歴</button>
+      <button data-tab="settings">設定</button>
+    </nav>
+    <div class="level" id="levelBadge"></div>
+  </header>
+
+  <main>
+    <!-- お題 -->
+    <section id="tab-play" class="tab active">
+      <div class="play-grid">
+        <div class="panel rules">
+          <h2>今回の縛り</h2>
+          <p class="hint">使う縛りだけオンにしてください。</p>
+          <div id="ruleList"></div>
+          <h3>出す素材の数</h3>
+          <div id="countList"></div>
+          <p class="hint" id="countHint"></p>
+          <details class="fixed-box" id="fixedBox">
+            <summary>自分で指定する <span class="hint" id="fixedSummary"></span></summary>
+            <p class="hint">指定した項目はそのまま出て、残りはランダムになります。お題の📌でも指定できます。</p>
+            <div id="fixedList"></div>
+          </details>
+          <button class="primary big" id="drawBtn">お題を引く</button>
+        </div>
+
+        <div class="panel challenge" id="challengePanel">
+          <div class="empty" id="challengeEmpty">
+            <div class="empty-mark">♪</div>
+            <p>左で縛りを選んで「お題を引く」を押してください。</p>
+            <p class="hint" id="libraryWarn"></p>
+          </div>
+          <div id="challengeBody" hidden>
+            <div class="challenge-head">
+              <h2>お題</h2>
+              <span class="rerolls" id="rerollInfo"></span>
+            </div>
+            <div class="timer-box">
+              <div class="timer" id="timer">--:--</div>
+              <div class="timer-sub" id="timerSub"></div>
+            </div>
+            <div class="actions" id="actions"></div>
+            <ul class="items" id="itemList"></ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ライブラリ -->
+    <section id="tab-library" class="tab">
+      <div class="panel">
+        <div class="row between">
+          <h2>ライブラリ</h2>
+          <div class="row">
+            <span class="hint" id="scanInfo"></span>
+            <button class="primary" id="rescanBtn">再スキャン</button>
+          </div>
+        </div>
+        <p class="hint">お題に出したくないものはチェックを外してください。種類が「推定」のものは名前から判断しているので、違っていたら直してください。</p>
+        <div class="subtabs">
+          <button data-lib="plugins" class="active">プラグイン</button>
+          <button data-lib="packs">サンプルパック</button>
+        </div>
+        <div class="row filters">
+          <input type="search" id="libSearch" placeholder="名前で絞り込み">
+          <select id="libTypeFilter">
+            <option value="all">すべての種類</option>
+            <option value="instrument">音源</option>
+            <option value="effect">エフェクト</option>
+            <option value="guessed">推定のもの</option>
+            <option value="off">使わないもの</option>
+          </select>
+          <span class="hint" id="libCount"></span>
+          <span class="spacer"></span>
+          <button id="bulkOn">表示中を全部使う</button>
+          <button id="bulkOff">表示中を全部外す</button>
+        </div>
+        <div class="table-wrap"><table id="libTable"></table></div>
+      </div>
+    </section>
+
+    <!-- 履歴 -->
+    <section id="tab-history" class="tab">
+      <div class="panel">
+        <h2>履歴</h2>
+        <div class="stats" id="stats"></div>
+        <div id="historyList"></div>
+      </div>
+    </section>
+
+    <!-- 設定 -->
+    <section id="tab-settings" class="tab">
+      <div class="settings-grid">
+        <div class="panel">
+          <h2>VSTフォルダ</h2>
+          <ul class="folders" id="vstFolders"></ul>
+          <button id="addVst">フォルダを追加</button>
+        </div>
+        <div class="panel">
+          <h2>サンプルフォルダ</h2>
+          <p class="hint">追加したフォルダの直下にあるフォルダを1つのサンプルパックとして扱います。</p>
+          <ul class="folders" id="sampleFolders"></ul>
+          <button id="addSample">フォルダを追加</button>
+        </div>
+        <div class="panel">
+          <h2>ジャンルとBPM</h2>
+          <p class="hint">1行に「ジャンル名, 最小BPM, 最大BPM」</p>
+          <textarea id="genreText" rows="12"></textarea>
+        </div>
+        <div class="panel">
+          <h2>楽器パート</h2>
+          <p class="hint">1行に1つ。お題の「使うパート」に出ます。</p>
+          <textarea id="partText" rows="12"></textarea>
+        </div>
+        <div class="panel">
+          <h2>その他</h2>
+          <label class="check"><input type="checkbox" id="optSound"> 時間切れで音を鳴らす</label>
+          <label class="field">レベルアップに必要なクリア回数
+            <input type="number" id="optClears" min="1" max="20">
+          </label>
+          <label class="field">最近出た素材を避ける（直近の回数）
+            <input type="number" id="optAvoid" min="0" max="50">
+          </label>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- 小さい窓モード -->
+  <div id="compactView" hidden>
+    <div class="c-timer" id="cTimer">--:--</div>
+    <div class="c-items" id="cItems"></div>
+    <div class="c-actions">
+      <button id="cPause">一時停止</button>
+      <button class="primary" id="cDone">できた</button>
+      <button id="cExpand">元に戻す</button>
+    </div>
+  </div>
+
+  <!-- 結果の入力 -->
+  <dialog id="resultDialog">
+    <form method="dialog" id="resultForm">
+      <h2 id="resultTitle">おつかれさま</h2>
+      <p class="hint" id="resultSub"></p>
+      <div class="stars" id="stars"></div>
+      <label class="field">メモ（よかった所・反省・曲名など）
+        <textarea id="resultMemo" rows="4"></textarea>
+      </label>
+      <div class="row end">
+        <button value="cancel" formnovalidate>戻る</button>
+        <button class="primary" value="save" id="resultSave">記録する</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- 指定する素材を選ぶ -->
+  <dialog id="pickDialog">
+    <form method="dialog">
+      <h2 id="pickTitle"></h2>
+      <input type="search" id="pickSearch" placeholder="名前で絞り込み（一覧にない名前も追加できます）">
+      <div class="pick-list" id="pickList"></div>
+      <div class="row between">
+        <span class="hint" id="pickCount"></span>
+        <div class="row">
+          <button value="cancel" formnovalidate>キャンセル</button>
+          <button class="primary" value="ok">決定</button>
+        </div>
+      </div>
+    </form>
+  </dialog>
+
+  <div class="toast" id="toast" hidden></div>
+
+  <script src="data.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
