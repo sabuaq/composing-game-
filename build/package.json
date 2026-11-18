@@ -1,0 +1,36 @@
+{
+  "name": "composing-practice-game",
+  "productName": "Composing Practice Game",
+  "version": "1.0.0",
+  "description": "A composing practice game that draws challenges from your own samples and plugins",
+  "author": "sabuaq",
+  "license": "MIT",
+  "private": true,
+  "main": "main.js",
+  "devDependencies": {
+    "electron": "45.3.4",
+    "electron-builder": "26.0.12"
+  },
+  "build": {
+    "appId": "io.github.sabuaq.composinggame",
+    "productName": "Composing Practice Game",
+    "directories": { "output": "dist" },
+    "files": ["main.js", "preload.js", "scanner.js", "icon.png", "renderer/**", "package.json"],
+    "icon": "icon.png",
+    "npmRebuild": false,
+    "win": {
+      "target": [
+        { "target": "nsis", "arch": ["x64"] },
+        { "target": "portable", "arch": ["x64"] }
+      ]
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "artifactName": "ComposingGame-Setup-${version}.exe"
+    },
+    "portable": {
+      "artifactName": "ComposingGame-Portable-${version}.exe"
+    }
+  }
+}

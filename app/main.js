@@ -3,8 +3,17 @@ const fs = require('fs/promises');
 const path = require('path');
 const { scanAll } = require('./scanner');
 
-// 設定・履歴は本体と同じ場所の data フォルダに保存する（Googleドライブで同期される）
-const DATA_DIR = process.env.SRG_DATA || path.join(__dirname, '..', 'data');
+// 設定・履歴を保存する data フォルダ
+// - 起動.vbs から動かす時：app フォルダの隣（Googleドライブなどで同期できる）
+// - ポータブル版の exe：その exe と同じフォルダ（PORTABLE_EXECUTABLE_DIR は electron-builder が渡す）
+// - インストール版：ユーザーごとのアプリ用フォルダ（%APPDATA% の下）
+function dataDir() {
+  if (process.env.SRG_DATA) return process.env.SRG_DATA;
+  if (process.env.PORTABLE_EXECUTABLE_DIR) return path.join(process.env.PORTABLE_EXECUTABLE_DIR, 'data');
+  if (app.isPackaged) return path.join(app.getPath('userData'), 'data');
+  return path.join(__dirname, '..', 'data');
+}
+const DATA_DIR = dataDir();
 const DATA_FILES = new Set(['settings', 'library', 'history']);
 
 let win;
@@ -19,6 +28,7 @@ function createWindow() {
     backgroundColor: '#14171a',
     title: '作曲練習ゲーム',
     autoHideMenuBar: true,
+    icon: path.join(__dirname, 'icon.png'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
