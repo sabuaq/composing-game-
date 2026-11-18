@@ -1,4 +1,4 @@
-/* global DEFAULT_SETTINGS, LEVELS, GOALS, NOTE_NAMES, BASIC_MODES, EXTRA_MODES, FX_TYPES, FX_DETECT_ORDER, FX_KNOWN, fxKey */
+/* global t, applyStaticText, I18N, DEFAULT_GENRES, DEFAULT_PARTS, DEFAULT_GENRES_EN, DEFAULT_PARTS_EN, DEFAULT_SETTINGS, LEVELS, GOALS, NOTE_NAMES, BASIC_MODES, EXTRA_MODES, FX_TYPES, FX_DETECT_ORDER, FX_KNOWN, fxKey */
 'use strict';
 
 const $ = (id) => document.getElementById(id);
@@ -46,7 +46,6 @@ function packOn(p) {
 }
 
 // エフェクトの種類（ライブラリで直したもの → VST3の分類 → 名前から推定）
-const FX_LABEL = Object.fromEntries(FX_TYPES.map((t) => [t.id, t.label]));
 const FX_DETECT = FX_DETECT_ORDER.map((id) => FX_TYPES.find((t) => t.id === id));
 function guessFx(name, cats = '') {
   const known = FX_KNOWN[fxKey(name)];
@@ -93,10 +92,18 @@ function pools() {
   };
 }
 
-const KIND_LABEL = {
-  genre: 'ジャンル', bpm: 'BPM', key: 'キー', goal: '目標', time: '制限時間',
-  pack: 'サンプルパック', instrument: '音源', effect: 'エフェクト', part: '使うパート',
-};
+const kindName = (kind) => t('kind.' + kind);
+const fxLabel = (id) => t('fx.' + id);
+const modeLabel = (id) => (I18N.ja['mode.' + id] ? t('mode.' + id) : id);
+const goalLabel = (id) => (I18N.ja['goal.' + id] ? t('goal.' + id) : id);
+const levelName = (lv) => t('level.' + lv);
+const locale = () => (LANG === 'ja' ? 'ja-JP' : 'en-US');
+// 表示する名前（キーと目標は今の言語で出す。古い履歴は記録した時の文字のまま）
+function itemName(it) {
+  if (it.kind === 'key' && it.mode) return it.note + ' ' + modeLabel(it.mode);
+  if (it.kind === 'goal' && it.goal) return goalLabel(it.goal);
+  return it.name;
+}
 const REROLLABLE = new Set(['genre', 'bpm', 'key', 'pack', 'instrument', 'effect', 'part']);
 
 const rand = (n) => Math.floor(Math.random() * n);
@@ -139,7 +146,7 @@ function randomKey(withModes) {
   const modes = withModes ? BASIC_MODES.concat(EXTRA_MODES) : BASIC_MODES;
   const note = f.keyNote || NOTE_NAMES[rand(12)];
   const mode = f.keyMode || modes[rand(modes.length)];
-  return note + ' ' + mode;
+  return { kind: 'key', note, mode, name: note + ' ' + modeLabel(mode) };
 }
 const keyFullyFixed = () => !!(settings.fixed.keyNote && settings.fixed.keyMode);
 const LIST_KINDS = ['pack', 'instrument', 'effect', 'part'];
@@ -175,8 +182,8 @@ function drawChallenge() {
       items.push({ kind: 'bpm', name: String(randInt(g.min, g.max)) });
     }
   }
-  if (r.key) items.push({ kind: 'key', name: randomKey(cfg.modes), fixed: keyFullyFixed() });
-  if (cfg.goal && cfg.goal !== 'なし') items.push({ kind: 'goal', name: cfg.goal });
+  if (r.key) items.push({ ...randomKey(cfg.modes), fixed: keyFullyFixed() });
+  if (cfg.goal && cfg.goal !== 'none') items.push({ kind: 'goal', goal: cfg.goal, name: goalLabel(cfg.goal) });
 
   const missing = [];
   for (const kind of LIST_KINDS) {
@@ -193,7 +200,7 @@ function drawChallenge() {
       for (const t of settings.effectTypes) {
         if (covered.has(t)) continue;
         const [c] = pickFrom(kind, p.effect.filter((e) => e.fxType === t), 1, used);
-        if (!c) { missing.push(FX_LABEL[t]); continue; }
+        if (!c) { missing.push(fxLabel(t)); continue; }
         used.add(c.name);
         items.push({ kind, name: c.name, fxType: t });
       }
@@ -206,10 +213,10 @@ function drawChallenge() {
     const need = Math.max(0, n - fixedList.length);
     if (!need) continue;
     const chosen = pickFrom(kind, drawPool(kind, p), need, new Set(fixedList.map((c) => c.name)));
-    if (chosen.length < need) missing.push(KIND_LABEL[kind]);
+    if (chosen.length < need) missing.push(kindName(kind));
     chosen.forEach((c) => items.push({ kind, name: c.name, path: c.path, fxType: c.fxType }));
   }
-  if (missing.length) toast(`${missing.join('・')}の候補が足りません（ライブラリ・設定を確認）`);
+  if (missing.length) toast(t('warn.missing', { list: missing.join(t('warn.listSep')) }));
 
   game.challenge = {
     level: cfg.level,
@@ -241,7 +248,7 @@ function rerollItem(index) {
     const g = game.challenge.items.find((x) => x.kind === 'genre')?.meta || { min: 80, max: 170 };
     next = { kind: 'bpm', name: String(randInt(g.min, g.max)) };
   } else if (it.kind === 'key') {
-    next = { kind: 'key', name: randomKey(cfg.modes) };
+    next = randomKey(cfg.modes);
   } else {
     const used = new Set(game.challenge.items.filter((x) => x.kind === it.kind).map((x) => x.name));
     // 種類ごとの時は同じ種類の中から引き直す
@@ -251,7 +258,7 @@ function rerollItem(index) {
     const [c] = pickFrom(it.kind, pool, 1, used);
     if (c) next = { kind: it.kind, name: c.name, path: c.path, fxType: c.fxType };
   }
-  if (!next) return toast('ほかの候補がありません');
+  if (!next) return toast(t('warn.noOther'));
   game.challenge.items[index] = next;
   game.rerollsLeft -= 1;
   renderChallenge();
@@ -268,9 +275,8 @@ function setFixedFromItem(it, on) {
   } else if (it.kind === 'bpm') {
     f.bpm = on ? +it.name : null;
   } else if (it.kind === 'key') {
-    const [note, mode] = it.name.split(' ');
-    f.keyNote = on ? note : '';
-    f.keyMode = on ? mode : '';
+    f.keyNote = on ? it.note : '';
+    f.keyMode = on ? it.mode : '';
   }
 }
 function pinItem(index) {
@@ -339,23 +345,23 @@ function tick() {
     const left = limit - el;
     over = left < 0;
     text = (over ? '+' : '') + fmt(left);
-    sub = over ? '時間切れ（このまま続けてもOK）' : `残り時間 / 制限 ${game.challenge.minutes}分`;
+    sub = over ? t('timer.over') : t('timer.left', { n: game.challenge.minutes });
     if (over && !game.timeUpNotified && game.status === 'running') {
       game.timeUpNotified = true;
       beep();
     }
   } else {
     text = fmt(el);
-    sub = '経過時間';
+    sub = t('timer.elapsed');
   }
-  if (game.status === 'drawn') sub = 'スタートを押すと計測が始まります';
-  if (game.status === 'paused') sub = '一時停止中';
+  if (game.status === 'drawn') sub = t('timer.ready');
+  if (game.status === 'paused') sub = t('timer.paused');
   $('timer').textContent = text;
   $('timer').classList.toggle('over', over);
   $('timerSub').textContent = sub;
   $('cTimer').textContent = text;
   $('cTimer').classList.toggle('over', over);
-  $('cPause').textContent = game.status === 'paused' ? '再開' : '一時停止';
+  $('cPause').textContent = game.status === 'paused' ? t('act.resume') : t('act.pause');
 }
 setInterval(tick, 250);
 
@@ -376,9 +382,8 @@ function finish(kind) {
     applyResult(null, '');
     return;
   }
-  const titles = { clear: 'クリア！', overtime: '完成！（時間オーバー）', giveup: 'ギブアップ' };
-  $('resultTitle').textContent = titles[result];
-  $('resultSub').textContent = `かかった時間 ${fmt(el)}${limit ? ` / 制限 ${game.challenge.minutes}分` : ''}`;
+  $('resultTitle').textContent = t('result.' + result);
+  $('resultSub').textContent = t('result.time', { time: fmt(el) }) + (limit ? t('result.limit', { n: game.challenge.minutes }) : '');
   renderStars(result === 'giveup' ? 0 : 3);
   $('resultMemo').value = '';
   $('resultDialog').showModal();
@@ -389,7 +394,7 @@ function renderStars(v) {
   starValue = v;
   $('stars').innerHTML = [1, 2, 3, 4, 5].map((n) =>
     `<button type="button" data-star="${n}" class="${n <= v ? 'on' : ''}" aria-label="${n}">★</button>`).join('') +
-    `<span class="hint">${v ? '自己評価 ' + v : '評価なし'}</span>`;
+    `<span class="hint">${v ? t('result.rated', { n: v }) : t('result.unrated')}</span>`;
 }
 $('stars').addEventListener('click', (e) => {
   const b = e.target.closest('[data-star]');
@@ -417,18 +422,20 @@ function applyResult(stars, memo) {
       memo,
       elapsedSec,
       limitMin: ch.minutes,
-      items: ch.items.map(({ kind, name, fixed, fxType }) => ({ kind, name, ...(fxType ? { fxType } : {}), ...(fixed ? { fixed: true } : {}) })),
+      items: ch.items.map(({ kind, name, fixed, fxType, note, mode, goal }) => ({
+        kind, name, ...(fxType ? { fxType } : {}), ...(mode ? { note, mode } : {}), ...(goal ? { goal } : {}), ...(fixed ? { fixed: true } : {}),
+      })),
     });
     window.api.save('history', history);
   }
-  let msg = result === 'giveup' ? 'おつかれさま。次いこう' : 'おつかれさま！';
+  let msg = result === 'giveup' ? t('result.thanksGiveup') : t('result.thanks');
   if (settings.rules.level && result === 'clear') {
     const pr = settings.progress;
     pr.clears += 1;
     if (pr.clears >= settings.clearsToLevelUp && pr.level < LEVELS.length) {
       pr.level += 1;
       pr.clears = 0;
-      msg = `レベルアップ！ Lv${pr.level}「${LEVELS[pr.level - 1].name}」`;
+      msg = t('level.up', { lv: pr.level, name: levelName(pr.level) });
     }
     saveSettings();
   }
@@ -447,7 +454,7 @@ async function setCompact(flag) {
   if (flag) {
     $('cItems').innerHTML = game.challenge.items
       .filter((it) => it.kind !== 'goal')
-      .map((it) => `<span title="${esc(KIND_LABEL[it.kind])}">${esc(it.kind === 'bpm' ? it.name + ' BPM' : it.name)}</span>`).join('');
+      .map((it) => `<span title="${esc(kindLabel(it))}">${esc(it.kind === 'bpm' ? it.name + ' BPM' : itemName(it))}</span>`).join('');
   }
 }
 $('cPause').onclick = pauseTimer;
@@ -455,30 +462,23 @@ $('cDone').onclick = () => { setCompact(false); finish('done'); };
 $('cExpand').onclick = () => setCompact(false);
 
 // ---------- 描画: お題 ----------
-const RULES = [
-  { id: 'time', label: '制限時間' },
-  { id: 'genre', label: 'ジャンル' },
-  { id: 'bpm', label: 'BPM' },
-  { id: 'key', label: 'キー' },
-  { id: 'level', label: '難易度' },
-  { id: 'record', label: '履歴に記録' },
-];
+const RULES = ['time', 'genre', 'bpm', 'key', 'level', 'record'];
 
 function renderRules() {
   const r = settings.rules;
   const m = settings.manual;
   const locked = game.status !== 'idle';
-  $('ruleList').innerHTML = RULES.map((rule) => {
+  $('ruleList').innerHTML = RULES.map((id) => ({ id, label: t('rule.' + id) })).map((rule) => {
     let extra = '';
     if (rule.id === 'time' && r.time && !r.level) {
-      extra = `<input type="number" min="1" max="600" data-manual="minutes" value="${m.minutes}"> 分`;
+      extra = `<input type="number" min="1" max="600" data-manual="minutes" value="${m.minutes}"> ${t('rule.minutes')}`;
     }
     if (rule.id === 'level' && r.level) {
       extra = `<select id="levelSelect">${LEVELS.map((L) =>
-        `<option value="${L.lv}" ${L.lv === settings.progress.level ? 'selected' : ''}>Lv${L.lv} ${esc(L.name)}</option>`).join('')}</select>`;
+        `<option value="${L.lv}" ${L.lv === settings.progress.level ? 'selected' : ''}>Lv${L.lv} ${esc(levelName(L.lv))}</option>`).join('')}</select>`;
     }
     if (rule.id === 'key' && r.key && !r.level) {
-      extra = `<label class="mini"><input type="checkbox" data-manual-check="modes" ${m.modes ? 'checked' : ''}> モードも出す</label>`;
+      extra = `<label class="mini"><input type="checkbox" data-manual-check="modes" ${m.modes ? 'checked' : ''}> ${t('rule.modes')}</label>`;
     }
     return `<div class="rule ${r[rule.id] ? 'on' : ''}">
       <label class="switch"><input type="checkbox" data-rule="${rule.id}" ${r[rule.id] ? 'checked' : ''} ${locked ? 'disabled' : ''}><span></span>${rule.label}</label>
@@ -487,12 +487,12 @@ function renderRules() {
   }).join('');
 
   if (!r.level) {
-    $('ruleList').insertAdjacentHTML('beforeend', `<div class="rule on"><span class="rule-name">目標</span>
-      <div class="rule-extra"><select data-manual="goal">${GOALS.map((g) => `<option ${g === m.goal ? 'selected' : ''}>${esc(g)}</option>`).join('')}</select></div></div>`);
+    $('ruleList').insertAdjacentHTML('beforeend', `<div class="rule on"><span class="rule-name">${t('rule.goal')}</span>
+      <div class="rule-extra"><select data-manual="goal">${GOALS.map((g) => `<option value="${g}" ${g === m.goal ? 'selected' : ''}>${esc(goalLabel(g))}</option>`).join('')}</select></div></div>`);
   }
 
   const cfg = currentConfig();
-  const counts = [['packs', 'サンプルパック'], ['instruments', '音源'], ['effects', 'エフェクト'], ['parts', '使うパート']];
+  const counts = [['packs', kindName('pack')], ['instruments', kindName('instrument')], ['effects', kindName('effect')], ['parts', kindName('part')]];
   $('countList').innerHTML = counts.map(([k, label]) => {
     const fixedCount = k === 'effects' && byType();
     const off = r.level || locked || fixedCount;
@@ -509,14 +509,17 @@ function renderRules() {
 
   if (r.level) {
     const L = LEVELS[settings.progress.level - 1];
-    $('countHint').textContent = `Lv${L.lv}：${r.time ? L.minutes + '分・' : ''}目標「${L.goal}」・引き直し${L.rerolls}回${L.modes ? '・モードあり' : ''}`;
+    $('countHint').textContent = t('level.hint', {
+      lv: L.lv, time: r.time ? t('level.hintTime', { min: L.minutes }) : '', goal: goalLabel(L.goal),
+      rerolls: L.rerolls, modes: L.modes ? t('level.hintModes') : '',
+    });
   } else {
-    $('countHint').textContent = '難易度をオフにすると数や時間を自由に決められます。引き直しは無制限です。';
+    $('countHint').textContent = t('level.manualHint');
   }
   renderFixed();
   // 難易度オンの時は引き直し回数があるので、丸ごと引き直しはできない
   $('drawBtn').disabled = locked && !(game.status === 'drawn' && !r.level);
-  $('drawBtn').textContent = game.status === 'drawn' ? 'もう一度引く' : 'お題を引く';
+  $('drawBtn').textContent = game.status === 'drawn' ? t('play.redraw') : t('play.draw');
 }
 
 // エフェクトの出し方（全部からランダム / 種類ごと）
@@ -524,25 +527,25 @@ function renderFxMode(locked) {
   const dis = locked ? 'disabled' : '';
   let html = `<div class="fx-mode">
     <div class="seg">
-      <button type="button" data-fxmode="random" class="${byType() ? '' : 'active'}" ${dis}>全部からランダム</button>
-      <button type="button" data-fxmode="byType" class="${byType() ? 'active' : ''}" ${dis}>種類ごと</button>
+      <button type="button" data-fxmode="random" class="${byType() ? '' : 'active'}" ${dis}>${t('fx.modeRandom')}</button>
+      <button type="button" data-fxmode="byType" class="${byType() ? 'active' : ''}" ${dis}>${t('fx.modeByType')}</button>
     </div>`;
   if (byType()) {
     const pool = pools().effect;
-    html += `<div class="fx-types">${FX_TYPES.map((t) => {
-      const on = settings.effectTypes.includes(t.id);
-      const n = pool.filter((e) => e.fxType === t.id).length;
-      return `<label class="fx-type ${on ? 'on' : ''}" title="候補${n}個"><input type="checkbox" data-fxtype="${t.id}" ${on ? 'checked' : ''} ${dis}>${esc(t.label)}<small>${n}</small></label>`;
+    html += `<div class="fx-types">${FX_TYPES.map((x) => {
+      const on = settings.effectTypes.includes(x.id);
+      const n = pool.filter((e) => e.fxType === x.id).length;
+      return `<label class="fx-type ${on ? 'on' : ''}" title="${t('fx.typeTitle', { n })}"><input type="checkbox" data-fxtype="${x.id}" ${on ? 'checked' : ''} ${dis}>${esc(fxLabel(x.id))}<small>${n}</small></label>`;
     }).join('')}</div>
-    <p class="hint">選んだ種類から1つずつ出ます（数字は候補の数）。種類はライブラリで直せます。</p>`;
+    <p class="hint">${t('fx.byTypeHint')}</p>`;
   }
   return html + '</div>';
 }
 $('countList').addEventListener('change', (e) => {
-  const t = e.target.dataset.fxtype;
-  if (!t) return;
+  const id = e.target.dataset.fxtype;
+  if (!id) return;
   const set = new Set(settings.effectTypes);
-  if (e.target.checked) set.add(t); else set.delete(t);
+  if (e.target.checked) set.add(id); else set.delete(id);
   // 表示の順番は FX_TYPES の並びにそろえる
   settings.effectTypes = FX_TYPES.map((x) => x.id).filter((id) => set.has(id));
   saveSettings();
@@ -583,32 +586,32 @@ function renderFixed() {
   const genres = parseGenres();
   if (f.genre && !genres.some((g) => g.name === f.genre)) genres.push({ name: f.genre });
   let html = `
-    <div class="fx-row"><span>ジャンル</span>
-      <select data-fx="genre">${opt('', 'ランダム', !f.genre)}${genres.map((g) => opt(g.name, g.name, g.name === f.genre)).join('')}</select></div>
+    <div class="fx-row"><span>${kindName('genre')}</span>
+      <select data-fx="genre">${opt('', t('fixed.random'), !f.genre)}${genres.map((g) => opt(g.name, g.name, g.name === f.genre)).join('')}</select></div>
     <div class="fx-row"><span>BPM</span>
-      <input type="number" data-fx="bpm" min="40" max="300" placeholder="ランダム" value="${f.bpm ?? ''}"></div>
-    <div class="fx-row"><span>キー</span>
+      <input type="number" data-fx="bpm" min="40" max="300" placeholder="${t('fixed.random')}" value="${f.bpm ?? ''}"></div>
+    <div class="fx-row"><span>${kindName('key')}</span>
       <div class="row">
-        <select data-fx="keyNote">${opt('', '音名ランダム', !f.keyNote)}${NOTE_NAMES.map((n) => opt(n, n, n === f.keyNote)).join('')}</select>
-        <select data-fx="keyMode">${opt('', 'ランダム', !f.keyMode)}${BASIC_MODES.concat(EXTRA_MODES).map((m) => opt(m, m, m === f.keyMode)).join('')}</select>
+        <select data-fx="keyNote">${opt('', t('fixed.noteRandom'), !f.keyNote)}${NOTE_NAMES.map((n) => opt(n, n, n === f.keyNote)).join('')}</select>
+        <select data-fx="keyMode">${opt('', t('fixed.random'), !f.keyMode)}${BASIC_MODES.concat(EXTRA_MODES).map((m) => opt(m, modeLabel(m), m === f.keyMode)).join('')}</select>
       </div></div>`;
   for (const kind of LIST_KINDS) {
     const list = f[kind];
     const n = kind === 'effect' ? effectCount(cfg) : cfg[COUNT_KEY[kind]];
     const rest = Math.max(0, n - list.length);
     html += `
-    <div class="fx-row list"><span>${KIND_LABEL[kind]}</span>
+    <div class="fx-row list"><span>${kindName(kind)}</span>
       <div class="fx-chips">
-        ${list.map((c, i) => `<span class="chip kind-${kind}">${esc(c.name)}<button type="button" class="x" data-fx-remove="${kind}:${i}" title="外す">×</button></span>`).join('')}
-        <button type="button" class="ghost add" data-fx-pick="${kind}">＋選ぶ</button>
-        <span class="hint">${list.length ? `指定${list.length}${rest ? `＋ランダム${rest}` : ''}` : `ランダム${n}`}</span>
+        ${list.map((c, i) => `<span class="chip kind-${kind}">${esc(c.name)}<button type="button" class="x" data-fx-remove="${kind}:${i}" title="${t('fixed.remove')}">×</button></span>`).join('')}
+        <button type="button" class="ghost add" data-fx-pick="${kind}">${t('fixed.pick')}</button>
+        <span class="hint">${list.length ? (rest ? t('fixed.countMixed', { n: list.length, rest }) : t('fixed.countFixed', { n: list.length })) : t('fixed.countRandom', { n })}</span>
       </div></div>`;
   }
-  html += '<div class="row end"><button type="button" class="ghost" id="fxClear">すべてランダムに戻す</button></div>';
+  html += '<div class="row end"><button type="button" class="ghost" id="fxClear">' + t('fixed.clear') + '</button></div>';
   $('fixedList').innerHTML = html;
 
   const count = (f.genre ? 1 : 0) + (f.bpm ? 1 : 0) + (f.keyNote || f.keyMode ? 1 : 0) + LIST_KINDS.reduce((s, k) => s + f[k].length, 0);
-  $('fixedSummary').textContent = count ? `${count}項目を指定中` : '';
+  $('fixedSummary').textContent = count ? t('fixed.summary', { n: count }) : '';
 }
 
 $('fixedList').addEventListener('change', (e) => {
@@ -647,7 +650,7 @@ let pickSelected = new Map();
 function openPicker(kind) {
   pickKind = kind;
   pickSelected = new Map(settings.fixed[kind].map((c) => [c.name, c]));
-  $('pickTitle').textContent = `${KIND_LABEL[kind]}を指定`;
+  $('pickTitle').textContent = t('pick.title', { kind: kindName(kind) });
   $('pickSearch').value = '';
   renderPicker();
   $('pickDialog').showModal();
@@ -662,14 +665,14 @@ function renderPicker() {
   const rows = all.filter((c) => !ql || c.name.toLowerCase().includes(ql)).slice(0, 400);
   let html = '';
   if (q && !all.some((c) => c.name === q)) {
-    html += `<button type="button" class="pick-add" data-add="${esc(q)}">＋「${esc(q)}」を追加して指定</button>`;
+    html += `<button type="button" class="pick-add" data-add="${esc(q)}">${esc(t('pick.add', { name: q }))}</button>`;
   }
   html += rows.map((c) => `
     <label class="pick-row"><input type="checkbox" data-pick="${esc(c.name)}" ${pickSelected.has(c.name) ? 'checked' : ''}>
       <span>${esc(c.name)}</span></label>`).join('');
-  if (!rows.length && !q) html += '<p class="hint">候補がありません。ライブラリ・設定を確認してください。</p>';
+  if (!rows.length && !q) html += `<p class="hint">${t('pick.none')}</p>`;
   $('pickList').innerHTML = html;
-  $('pickCount').textContent = `${pickSelected.size}件を選択中`;
+  $('pickCount').textContent = t('pick.count', { n: pickSelected.size });
 }
 
 $('pickSearch').oninput = renderPicker;
@@ -683,7 +686,7 @@ $('pickList').addEventListener('change', (e) => {
   } else {
     pickSelected.delete(name);
   }
-  $('pickCount').textContent = `${pickSelected.size}件を選択中`;
+  $('pickCount').textContent = t('pick.count', { n: pickSelected.size });
 });
 $('pickList').addEventListener('click', (e) => {
   const add = e.target.closest('[data-add]');
@@ -699,7 +702,7 @@ $('pickDialog').addEventListener('close', () => {
   renderRules();
 });
 
-const kindLabel = (it) => KIND_LABEL[it.kind] + (it.fxType ? '・' + (FX_LABEL[it.fxType] || '') : '');
+const kindLabel = (it) => kindName(it.kind) + (it.fxType ? t('kind.sep') + fxLabel(it.fxType) : '');
 
 function renderChallenge() {
   const ch = game.challenge;
@@ -709,34 +712,34 @@ function renderChallenge() {
   if (!ch) {
     const p = pools();
     const warn = [];
-    if (!library.scannedAt) warn.push('まだスキャンしていません。');
-    if (!settings.sampleRoots.length) warn.push('サンプルフォルダが未設定です（設定タブで追加）。');
-    if (!p.instrument.length) warn.push('音源の候補が0件です。');
+    if (!library.scannedAt) warn.push(t('warn.notScanned'));
+    if (!settings.sampleRoots.length) warn.push(t('warn.noSamples'));
+    if (!p.instrument.length) warn.push(t('warn.noInstruments'));
     $('libraryWarn').textContent = warn.join(' ');
     return;
   }
   const canReroll = game.status === 'drawn' || game.status === 'running' || game.status === 'paused';
-  $('rerollInfo').textContent = game.rerollsLeft === Infinity ? '引き直し：無制限' : `引き直し：残り${game.rerollsLeft}回`;
+  $('rerollInfo').textContent = game.rerollsLeft === Infinity ? t('reroll.unlimited') : t('reroll.left', { n: game.rerollsLeft });
   $('itemList').innerHTML = ch.items.map((it, i) => `
     <li class="item kind-${it.kind} ${it.fixed ? 'fixed' : ''}">
-      <span class="kind">${kindLabel(it)}${it.fixed ? '<em>指定</em>' : ''}</span>
-      <span class="name">${esc(it.name)}${it.kind === 'bpm' ? ' <small>BPM</small>' : ''}</span>
-      ${it.path ? `<button class="ghost" data-open="${i}" title="フォルダを開く">開く</button>` : ''}
+      <span class="kind">${kindLabel(it)}${it.fixed ? `<em>${t('item.fixed')}</em>` : ''}</span>
+      <span class="name">${esc(itemName(it))}${it.kind === 'bpm' ? ' <small>BPM</small>' : ''}</span>
+      ${it.path ? `<button class="ghost" data-open="${i}" title="${t('item.openTitle')}">${t('item.open')}</button>` : ''}
       ${REROLLABLE.has(it.kind) ? `
-        <button class="ghost pin ${it.fixed ? 'on' : ''}" data-pin="${i}" title="${it.fixed ? '指定を外す' : '次からも固定する（指定に入れる）'}">📌</button>
-        <button class="ghost reroll" data-reroll="${i}" ${!canReroll || game.rerollsLeft <= 0 || it.fixed ? 'disabled' : ''} title="これだけ引き直す">↻</button>` : ''}
+        <button class="ghost pin ${it.fixed ? 'on' : ''}" data-pin="${i}" title="${it.fixed ? t('item.unpin') : t('item.pin')}">📌</button>
+        <button class="ghost reroll" data-reroll="${i}" ${!canReroll || game.rerollsLeft <= 0 || it.fixed ? 'disabled' : ''} title="${t('item.reroll')}">↻</button>` : ''}
     </li>`).join('') +
-    (ch.minutes ? `<li class="item kind-time"><span class="kind">制限時間</span><span class="name">${ch.minutes}分</span></li>` : '');
+    (ch.minutes ? `<li class="item kind-time"><span class="kind">${kindName('time')}</span><span class="name">${t('item.minutes', { n: ch.minutes })}</span></li>` : '');
 
   const a = $('actions');
   if (game.status === 'drawn') {
-    a.innerHTML = '<button data-act="cancel">やめる</button><button class="primary big" data-act="start">スタート</button>';
+    a.innerHTML = `<button data-act="cancel">${t('act.cancel')}</button><button class="primary big" data-act="start">${t('act.start')}</button>`;
   } else {
     a.innerHTML = `
-      <button data-act="pause">${game.status === 'paused' ? '再開' : '一時停止'}</button>
-      <button data-act="compact">小さく表示</button>
-      <button data-act="giveup">ギブアップ</button>
-      <button class="primary" data-act="done">できた</button>`;
+      <button data-act="pause">${game.status === 'paused' ? t('act.resume') : t('act.pause')}</button>
+      <button data-act="compact">${t('act.compact')}</button>
+      <button data-act="giveup">${t('act.giveup')}</button>
+      <button class="primary" data-act="done">${t('act.done')}</button>`;
   }
   tick();
 }
@@ -755,7 +758,7 @@ $('actions').addEventListener('click', (e) => {
   else if (act === 'cancel') { game.status = 'idle'; game.challenge = null; renderChallenge(); }
   else if (act === 'pause') pauseTimer();
   else if (act === 'compact') setCompact(true);
-  else if (act === 'giveup') { if (confirm('ギブアップしますか？')) finish('giveup'); }
+  else if (act === 'giveup') { if (confirm(t('act.giveupConfirm'))) finish('giveup'); }
   else if (act === 'done') finish('done');
 });
 
@@ -764,8 +767,8 @@ function renderLevel() {
   const L = LEVELS[pr.level - 1];
   const rest = settings.clearsToLevelUp - pr.clears;
   $('levelBadge').innerHTML = settings.rules.level
-    ? `<b>Lv${L.lv}</b> ${esc(L.name)} <span class="hint">${pr.level < LEVELS.length ? `次まであと${rest}回クリア` : '最高レベル'}</span>`
-    : '<span class="hint">難易度オフ</span>';
+    ? `<b>Lv${L.lv}</b> ${esc(levelName(L.lv))} <span class="hint">${pr.level < LEVELS.length ? t('level.next', { n: rest }) : t('level.max')}</span>`
+    : `<span class="hint">${t('level.off')}</span>`;
 }
 
 // ---------- 描画: ライブラリ ----------
@@ -789,39 +792,41 @@ function filteredLib() {
 
 function renderLibrary() {
   $('scanInfo').textContent = library.scannedAt
-    ? `最終スキャン ${new Date(library.scannedAt).toLocaleString('ja-JP')}・プラグイン${library.plugins.length}・パック${library.packs.length}`
-    : '未スキャン';
+    ? t('lib.scanned', { date: new Date(library.scannedAt).toLocaleString(locale()), p: library.plugins.length, k: library.packs.length })
+    : t('lib.notScanned');
   document.querySelectorAll('[data-lib]').forEach((b) => b.classList.toggle('active', b.dataset.lib === libMode));
-  if (!$('libTypeFilter').querySelector('[value^="fx:"]')) {
-    $('libTypeFilter').querySelector('[value="effect"]').insertAdjacentHTML('afterend',
-      FX_TYPES.map((x) => `<option value="fx:${x.id}">　エフェクト・${esc(x.label)}</option>`).join(''));
-  }
+  // 種類の絞り込みは言語が変わっても作り直せるように毎回入れ直す
+  const filterValue = $('libTypeFilter').value;
+  $('libTypeFilter').querySelectorAll('[value^="fx:"]').forEach((o) => o.remove());
+  $('libTypeFilter').querySelector('[value="effect"]').insertAdjacentHTML('afterend',
+    FX_TYPES.map((x) => `<option value="fx:${x.id}">　${esc(t('lib.effectOf', { type: fxLabel(x.id) }))}</option>`).join(''));
+  $('libTypeFilter').value = filterValue || 'all';
   $('libTypeFilter').querySelectorAll('option').forEach((o) => {
     o.hidden = libMode === 'packs' && !['all', 'off'].includes(o.value);
   });
   const rows = filteredLib();
-  $('libCount').textContent = `${rows.length}件`;
+  $('libCount').textContent = t('lib.count', { n: rows.length });
   if (libMode === 'packs') {
-    $('libTable').innerHTML = `<thead><tr><th>使う</th><th>パック名</th><th>フォルダ</th><th></th></tr></thead><tbody>` +
+    $('libTable').innerHTML = `<thead><tr><th>${t('lib.colUse')}</th><th>${t('lib.colPack')}</th><th>${t('lib.colFolder')}</th><th></th></tr></thead><tbody>` +
       (rows.length ? rows.map((p) => `<tr class="${packOn(p) ? '' : 'off'}">
         <td><input type="checkbox" data-pack="${esc(p.key)}" ${packOn(p) ? 'checked' : ''}></td>
         <td>${esc(p.name)}</td><td class="hint">${esc(p.root)}</td>
-        <td><button class="ghost" data-openpath="${esc(p.path)}">開く</button></td></tr>`).join('')
-        : `<tr><td colspan="4" class="hint">サンプルパックがありません。設定タブでサンプルフォルダを追加して再スキャンしてください。</td></tr>`) + '</tbody>';
+        <td><button class="ghost" data-openpath="${esc(p.path)}">${t('item.open')}</button></td></tr>`).join('')
+        : `<tr><td colspan="4" class="hint">${t('lib.noPacks')}</td></tr>`) + '</tbody>';
     return;
   }
-  $('libTable').innerHTML = `<thead><tr><th>使う</th><th>名前</th><th>メーカー</th><th>形式</th><th>種類</th></tr></thead><tbody>` +
+  $('libTable').innerHTML = `<thead><tr><th>${t('lib.colUse')}</th><th>${t('lib.colName')}</th><th>${t('lib.colVendor')}</th><th>${t('lib.colFormat')}</th><th>${t('lib.colType')}</th></tr></thead><tbody>` +
     rows.map((p) => {
-      const t = pluginType(p);
+      const ptype = pluginType(p);
       const guessed = p.guessed && !settings.pluginOverrides[p.key]?.type;
       return `<tr class="${pluginOn(p) ? '' : 'off'}">
         <td><input type="checkbox" data-plugin="${esc(p.key)}" ${pluginOn(p) ? 'checked' : ''}></td>
         <td>${esc(p.name)}</td><td class="hint">${esc(p.vendor)}</td><td class="hint">${p.format}</td>
         <td><select data-ptype="${esc(p.key)}">
-          <option value="instrument" ${t === 'instrument' ? 'selected' : ''}>音源</option>
-          <option value="effect" ${t === 'effect' ? 'selected' : ''}>エフェクト</option>
-        </select>${t === 'effect' ? ` <select data-pfx="${esc(p.key)}">${FX_TYPES.map((x) =>
-          `<option value="${x.id}" ${x.id === pluginFx(p) ? 'selected' : ''}>${esc(x.label)}</option>`).join('')}</select>` : ''}${guessed ? ' <span class="badge">推定</span>' : ''}</td></tr>`;
+          <option value="instrument" ${ptype === 'instrument' ? 'selected' : ''}>${kindName('instrument')}</option>
+          <option value="effect" ${ptype === 'effect' ? 'selected' : ''}>${kindName('effect')}</option>
+        </select>${ptype === 'effect' ? ` <select data-pfx="${esc(p.key)}">${FX_TYPES.map((x) =>
+          `<option value="${x.id}" ${x.id === pluginFx(p) ? 'selected' : ''}>${esc(fxLabel(x.id))}</option>`).join('')}</select>` : ''}${guessed ? ` <span class="badge">${t('lib.guessBadge')}</span>` : ''}</td></tr>`;
     }).join('') + '</tbody>';
 }
 
@@ -862,21 +867,20 @@ $('bulkOff').onclick = () => bulk(false);
 
 async function rescan() {
   $('rescanBtn').disabled = true;
-  $('rescanBtn').textContent = 'スキャン中…';
+  $('rescanBtn').textContent = t('lib.scanning');
   try {
     library = await window.api.scan({ vstRoots: settings.vstRoots, sampleRoots: settings.sampleRoots });
     await window.api.save('library', library);
-    toast(`プラグイン${library.plugins.length}個・パック${library.packs.length}個を読み込みました`);
+    toast(t('lib.loaded', { p: library.plugins.length, k: library.packs.length }));
   } finally {
     $('rescanBtn').disabled = false;
-    $('rescanBtn').textContent = '再スキャン';
+    $('rescanBtn').textContent = t('lib.rescan');
     renderAll();
   }
 }
 $('rescanBtn').onclick = rescan;
 
 // ---------- 描画: 履歴 ----------
-const RESULT_LABEL = { clear: 'クリア', overtime: '時間オーバー', giveup: 'ギブアップ' };
 
 function renderHistory() {
   const done = history.filter((h) => h.result !== 'giveup');
@@ -884,31 +888,31 @@ function renderHistory() {
   const rated = history.filter((h) => h.stars);
   const total = history.reduce((s, h) => s + h.elapsedSec, 0);
   $('stats').innerHTML = [
-    ['挑戦', history.length + '回'],
-    ['完成', done.length + '回'],
-    ['時間内クリア', clears + '回'],
-    ['平均★', rated.length ? (rated.reduce((s, h) => s + h.stars, 0) / rated.length).toFixed(1) : '-'],
-    ['合計時間', fmt(total * 1000)],
+    [t('hist.tries'), t('hist.times', { n: history.length })],
+    [t('hist.done'), t('hist.times', { n: done.length })],
+    [t('hist.clears'), t('hist.times', { n: clears })],
+    [t('hist.avg'), rated.length ? (rated.reduce((s, h) => s + h.stars, 0) / rated.length).toFixed(1) : '-'],
+    [t('hist.total'), fmt(total * 1000)],
   ].map(([k, v]) => `<div><span>${k}</span><b>${v}</b></div>`).join('');
 
   $('historyList').innerHTML = history.length ? history.map((h) => `
     <article class="hist res-${h.result}">
       <header>
-        <span class="date">${new Date(h.date).toLocaleString('ja-JP', { dateStyle: 'medium', timeStyle: 'short' })}</span>
-        <span class="tag">${RESULT_LABEL[h.result]}</span>
+        <span class="date">${new Date(h.date).toLocaleString(locale(), { dateStyle: 'medium', timeStyle: 'short' })}</span>
+        <span class="tag">${t('hist.res.' + h.result)}</span>
         ${h.level ? `<span class="hint">Lv${h.level}</span>` : ''}
-        <span class="hint">${fmt(h.elapsedSec * 1000)}${h.limitMin ? ` / ${h.limitMin}分` : ''}</span>
+        <span class="hint">${fmt(h.elapsedSec * 1000)}${h.limitMin ? t('hist.limit', { n: h.limitMin }) : ''}</span>
         <span class="star-view">${h.stars ? '★'.repeat(h.stars) + '<i>' + '★'.repeat(5 - h.stars) + '</i>' : ''}</span>
         <span class="spacer"></span>
-        <button class="ghost" data-del="${h.id}">削除</button>
+        <button class="ghost" data-del="${h.id}">${t('hist.delete')}</button>
       </header>
-      <div class="chips">${h.items.map((it) => `<span class="chip kind-${it.kind}"><i>${kindLabel(it)}${it.fixed ? '📌' : ''}</i>${esc(it.name)}</span>`).join('')}</div>
+      <div class="chips">${h.items.map((it) => `<span class="chip kind-${it.kind}"><i>${kindLabel(it)}${it.fixed ? '📌' : ''}</i>${esc(itemName(it))}</span>`).join('')}</div>
       ${h.memo ? `<p class="memo">${esc(h.memo)}</p>` : ''}
-    </article>`).join('') : '<p class="hint">まだ記録がありません。</p>';
+    </article>`).join('') : `<p class="hint">${t('hist.empty')}</p>`;
 }
 $('historyList').addEventListener('click', (e) => {
   const b = e.target.closest('[data-del]');
-  if (!b || !confirm('この記録を削除しますか？')) return;
+  if (!b || !confirm(t('hist.deleteConfirm'))) return;
   history = history.filter((h) => h.id !== b.dataset.del);
   window.api.save('history', history);
   renderHistory();
@@ -917,8 +921,8 @@ $('historyList').addEventListener('click', (e) => {
 // ---------- 描画: 設定 ----------
 function renderFolders(listId, key) {
   $(listId).innerHTML = settings[key].length ? settings[key].map((f, i) => `
-    <li><span>${esc(f)}</span><button class="ghost" data-remove="${key}:${i}">外す</button></li>`).join('')
-    : '<li class="hint">まだありません</li>';
+    <li><span>${esc(f)}</span><button class="ghost" data-remove="${key}:${i}">${t('set.remove')}</button></li>`).join('')
+    : `<li class="hint">${t('set.none')}</li>`;
 }
 function renderSettings() {
   renderFolders('vstFolders', 'vstRoots');
@@ -972,6 +976,29 @@ function renderAll() {
   renderSettings();
 }
 
+// ---------- 言語 ----------
+// ジャンルとパートが初期値のままなら、切り替えた言語の初期値に入れ替える（自分で書き換えたものはそのまま）
+const DEFAULT_LISTS = { ja: { genres: DEFAULT_GENRES, parts: DEFAULT_PARTS }, en: { genres: DEFAULT_GENRES_EN, parts: DEFAULT_PARTS_EN } };
+function setLang(lang) {
+  const prev = LANG;
+  LANG = I18N[lang] ? lang : 'ja';
+  if (settings.genresText === DEFAULT_LISTS[prev].genres) settings.genresText = DEFAULT_LISTS[LANG].genres;
+  if (settings.partsText === DEFAULT_LISTS[prev].parts) settings.partsText = DEFAULT_LISTS[LANG].parts;
+  settings.lang = LANG;
+  $('langSelect').value = LANG;
+  applyStaticText();
+  renderAll();
+}
+$('langSelect').onchange = (e) => { setLang(e.target.value); saveSettings(); };
+
+// 前の版の設定（目標・モードを日本語の文字で持っていた）を id に直す
+const OLD_GOALS = { 'なし': 'none', '8小節のループ': 'loop8', '16小節のループ': 'loop16', 'ビルドアップ→ドロップ': 'build', 'イントロ→ビルド→ドロップ': 'intro', '1分の曲の骨組み': 'oneMin' };
+const OLD_MODES = { 'メジャー': 'major', 'マイナー': 'minor', 'ドリアン': 'dorian', 'フリジアン': 'phrygian', 'リディアン': 'lydian', 'ミクソリディアン': 'mixolydian' };
+function migrateSettings() {
+  if (OLD_GOALS[settings.manual.goal]) settings.manual.goal = OLD_GOALS[settings.manual.goal];
+  if (OLD_MODES[settings.fixed.keyMode]) settings.fixed.keyMode = OLD_MODES[settings.fixed.keyMode];
+}
+
 // ---------- 起動 ----------
 (async function init() {
   const saved = (await window.api.load('settings')) || {};
@@ -983,8 +1010,10 @@ function renderAll() {
     progress: { ...DEFAULT_SETTINGS.progress, ...saved.progress },
     fixed: { ...structuredClone(DEFAULT_SETTINGS.fixed), ...saved.fixed },
   };
+  migrateSettings();
   library = (await window.api.load('library')) || library;
   history = (await window.api.load('history')) || [];
-  renderAll();
+  // 言語：保存したものがなければPCの言語（日本語以外は英語）
+  setLang(settings.lang || (navigator.language.startsWith('ja') ? 'ja' : 'en'));
   if (!library.scannedAt) await rescan();
 })();

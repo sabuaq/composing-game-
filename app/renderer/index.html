@@ -8,14 +8,17 @@
 </head>
 <body>
   <header class="top">
-    <div class="brand">作曲練習ゲーム</div>
+    <div class="brand" data-i18n="app.title">作曲練習ゲーム</div>
     <nav class="tabs">
-      <button data-tab="play" class="active">お題</button>
-      <button data-tab="library">ライブラリ</button>
-      <button data-tab="history">履歴</button>
-      <button data-tab="settings">設定</button>
+      <button data-tab="play" class="active" data-i18n="tab.play">お題</button>
+      <button data-tab="library" data-i18n="tab.library">ライブラリ</button>
+      <button data-tab="history" data-i18n="tab.history">履歴</button>
+      <button data-tab="settings" data-i18n="tab.settings">設定</button>
     </nav>
-    <div class="level" id="levelBadge"></div>
+    <div class="top-right">
+      <div class="level" id="levelBadge"></div>
+      <select id="langSelect" aria-label="Language"><option value="ja">日本語</option><option value="en">English</option></select>
+    </div>
   </header>
 
   <main>
@@ -23,15 +26,15 @@
     <section id="tab-play" class="tab active">
       <div class="play-grid">
         <div class="panel rules">
-          <h2>今回の縛り</h2>
-          <p class="hint">使う縛りだけオンにしてください。</p>
+          <h2 data-i18n="play.rules">今回の縛り</h2>
+          <p class="hint" data-i18n="play.rulesHint">使う縛りだけオンにしてください。</p>
           <div id="ruleList"></div>
-          <h3>出す素材の数</h3>
+          <h3 data-i18n="play.counts">出す素材の数</h3>
           <div id="countList"></div>
           <p class="hint" id="countHint"></p>
           <details class="fixed-box" id="fixedBox">
-            <summary>自分で指定する <span class="hint" id="fixedSummary"></span></summary>
-            <p class="hint">指定した項目はそのまま出て、残りはランダムになります。お題の📌でも指定できます。</p>
+            <summary><span data-i18n="play.fixed">自分で指定する</span> <span class="hint" id="fixedSummary"></span></summary>
+            <p class="hint" data-i18n="play.fixedHint">指定した項目はそのまま出て、残りはランダムになります。お題の📌でも指定できます。</p>
             <div id="fixedList"></div>
           </details>
           <button class="primary big" id="drawBtn">お題を引く</button>
@@ -40,12 +43,12 @@
         <div class="panel challenge" id="challengePanel">
           <div class="empty" id="challengeEmpty">
             <div class="empty-mark">♪</div>
-            <p>左で縛りを選んで「お題を引く」を押してください。</p>
+            <p data-i18n="play.empty">左で縛りを選んで「お題を引く」を押してください。</p>
             <p class="hint" id="libraryWarn"></p>
           </div>
           <div id="challengeBody" hidden>
             <div class="challenge-head">
-              <h2>お題</h2>
+              <h2 data-i18n="play.challenge">お題</h2>
               <span class="rerolls" id="rerollInfo"></span>
             </div>
             <div class="timer-box">
@@ -63,30 +66,30 @@
     <section id="tab-library" class="tab">
       <div class="panel">
         <div class="row between">
-          <h2>ライブラリ</h2>
+          <h2 data-i18n="tab.library">ライブラリ</h2>
           <div class="row">
             <span class="hint" id="scanInfo"></span>
-            <button class="primary" id="rescanBtn">再スキャン</button>
+            <button class="primary" id="rescanBtn" data-i18n="lib.rescan">再スキャン</button>
           </div>
         </div>
-        <p class="hint">お題に出したくないものはチェックを外してください。種類が「推定」のものは名前から判断しているので、違っていたら直してください。</p>
+        <p class="hint" data-i18n="lib.hint">お題に出したくないものはチェックを外してください。種類が「推定」のものは名前から判断しているので、違っていたら直してください。</p>
         <div class="subtabs">
-          <button data-lib="plugins" class="active">プラグイン</button>
-          <button data-lib="packs">サンプルパック</button>
+          <button data-lib="plugins" class="active" data-i18n="lib.plugins">プラグイン</button>
+          <button data-lib="packs" data-i18n="lib.packs">サンプルパック</button>
         </div>
         <div class="row filters">
-          <input type="search" id="libSearch" placeholder="名前で絞り込み">
+          <input type="search" id="libSearch" data-i18n-ph="lib.search" placeholder="名前で絞り込み">
           <select id="libTypeFilter">
-            <option value="all">すべての種類</option>
-            <option value="instrument">音源</option>
-            <option value="effect">エフェクト</option>
-            <option value="guessed">推定のもの</option>
-            <option value="off">使わないもの</option>
+            <option value="all" data-i18n="lib.all">すべての種類</option>
+            <option value="instrument" data-i18n="lib.instrument">音源</option>
+            <option value="effect" data-i18n="lib.effect">エフェクト</option>
+            <option value="guessed" data-i18n="lib.guessed">推定のもの</option>
+            <option value="off" data-i18n="lib.off">使わないもの</option>
           </select>
           <span class="hint" id="libCount"></span>
           <span class="spacer"></span>
-          <button id="bulkOn">表示中を全部使う</button>
-          <button id="bulkOff">表示中を全部外す</button>
+          <button id="bulkOn" data-i18n="lib.bulkOn">表示中を全部使う</button>
+          <button id="bulkOff" data-i18n="lib.bulkOff">表示中を全部外す</button>
         </div>
         <div class="table-wrap"><table id="libTable"></table></div>
       </div>
@@ -95,7 +98,7 @@
     <!-- 履歴 -->
     <section id="tab-history" class="tab">
       <div class="panel">
-        <h2>履歴</h2>
+        <h2 data-i18n="tab.history">履歴</h2>
         <div class="stats" id="stats"></div>
         <div id="historyList"></div>
       </div>
@@ -105,33 +108,33 @@
     <section id="tab-settings" class="tab">
       <div class="settings-grid">
         <div class="panel">
-          <h2>VSTフォルダ</h2>
+          <h2 data-i18n="set.vst">VSTフォルダ</h2>
           <ul class="folders" id="vstFolders"></ul>
-          <button id="addVst">フォルダを追加</button>
+          <button id="addVst" data-i18n="set.addFolder">フォルダを追加</button>
         </div>
         <div class="panel">
-          <h2>サンプルフォルダ</h2>
-          <p class="hint">追加したフォルダの直下にあるフォルダを1つのサンプルパックとして扱います。</p>
+          <h2 data-i18n="set.samples">サンプルフォルダ</h2>
+          <p class="hint" data-i18n="set.samplesHint">追加したフォルダの直下にあるフォルダを1つのサンプルパックとして扱います。</p>
           <ul class="folders" id="sampleFolders"></ul>
-          <button id="addSample">フォルダを追加</button>
+          <button id="addSample" data-i18n="set.addFolder">フォルダを追加</button>
         </div>
         <div class="panel">
-          <h2>ジャンルとBPM</h2>
-          <p class="hint">1行に「ジャンル名, 最小BPM, 最大BPM」</p>
+          <h2 data-i18n="set.genres">ジャンルとBPM</h2>
+          <p class="hint" data-i18n="set.genresHint">1行に「ジャンル名, 最小BPM, 最大BPM」</p>
           <textarea id="genreText" rows="12"></textarea>
         </div>
         <div class="panel">
-          <h2>楽器パート</h2>
-          <p class="hint">1行に1つ。お題の「使うパート」に出ます。</p>
+          <h2 data-i18n="set.parts">楽器パート</h2>
+          <p class="hint" data-i18n="set.partsHint">1行に1つ。お題の「使うパート」に出ます。</p>
           <textarea id="partText" rows="12"></textarea>
         </div>
         <div class="panel">
-          <h2>その他</h2>
-          <label class="check"><input type="checkbox" id="optSound"> 時間切れで音を鳴らす</label>
-          <label class="field">レベルアップに必要なクリア回数
+          <h2 data-i18n="set.other">その他</h2>
+          <label class="check"><input type="checkbox" id="optSound"> <span data-i18n="set.sound">時間切れで音を鳴らす</span></label>
+          <label class="field"><span data-i18n="set.clears">レベルアップに必要なクリア回数</span>
             <input type="number" id="optClears" min="1" max="20">
           </label>
-          <label class="field">最近出た素材を避ける（直近の回数）
+          <label class="field"><span data-i18n="set.avoid">最近出た素材を避ける（直近の回数）</span>
             <input type="number" id="optAvoid" min="0" max="50">
           </label>
         </div>
@@ -145,23 +148,23 @@
     <div class="c-items" id="cItems"></div>
     <div class="c-actions">
       <button id="cPause">一時停止</button>
-      <button class="primary" id="cDone">できた</button>
-      <button id="cExpand">元に戻す</button>
+      <button class="primary" id="cDone" data-i18n="act.done">できた</button>
+      <button id="cExpand" data-i18n="act.expand">元に戻す</button>
     </div>
   </div>
 
   <!-- 結果の入力 -->
   <dialog id="resultDialog">
     <form method="dialog" id="resultForm">
-      <h2 id="resultTitle">おつかれさま</h2>
+      <h2 id="resultTitle" data-i18n="result.default">おつかれさま</h2>
       <p class="hint" id="resultSub"></p>
       <div class="stars" id="stars"></div>
-      <label class="field">メモ（よかった所・反省・曲名など）
+      <label class="field"><span data-i18n="result.memo">メモ（よかった所・反省・曲名など）</span>
         <textarea id="resultMemo" rows="4"></textarea>
       </label>
       <div class="row end">
-        <button value="cancel" formnovalidate>戻る</button>
-        <button class="primary" value="save" id="resultSave">記録する</button>
+        <button value="cancel" formnovalidate data-i18n="result.back">戻る</button>
+        <button class="primary" value="save" id="resultSave" data-i18n="result.save">記録する</button>
       </div>
     </form>
   </dialog>
@@ -170,13 +173,13 @@
   <dialog id="pickDialog">
     <form method="dialog">
       <h2 id="pickTitle"></h2>
-      <input type="search" id="pickSearch" placeholder="名前で絞り込み（一覧にない名前も追加できます）">
+      <input type="search" id="pickSearch" data-i18n-ph="pick.search" placeholder="名前で絞り込み（一覧にない名前も追加できます）">
       <div class="pick-list" id="pickList"></div>
       <div class="row between">
         <span class="hint" id="pickCount"></span>
         <div class="row">
-          <button value="cancel" formnovalidate>キャンセル</button>
-          <button class="primary" value="ok">決定</button>
+          <button value="cancel" formnovalidate data-i18n="pick.cancel">キャンセル</button>
+          <button class="primary" value="ok" data-i18n="pick.ok">決定</button>
         </div>
       </div>
     </form>
@@ -184,6 +187,7 @@
 
   <div class="toast" id="toast" hidden></div>
 
+  <script src="i18n.js"></script>
   <script src="data.js"></script>
   <script src="app.js"></script>
 </body>
