@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, screen } = require('electron');
 const fs = require('fs/promises');
 const path = require('path');
 const { scanAll } = require('./scanner');
@@ -15,9 +15,12 @@ function dataDir() {
 }
 const DATA_DIR = dataDir();
 const DATA_FILES = new Set(['settings', 'library', 'history']);
+const saveQueues = new Map();
 
 let win;
 let normalBounds = null;
+let wasMaximized = false;
+let isCompact = false;
 
 function createWindow() {
   win = new BrowserWindow({
@@ -37,7 +40,7 @@ function createWindow() {
   });
   win.loadFile(path.join(__dirname, 'renderer', 'index.html'));
 
-  // 動作確認用: SRG_DEBUG=1 で画面のログを出す、SRG_SHOT=フォルダ で画面を保存する
+  // 動作確認用: SRG_DEBUG=1 で画面のログを出す
   if (process.env.SRG_DEBUG) {
     win.webContents.on('console-message', (e) => console.log('[renderer]', e.message ?? e));
     win.webContents.on('preload-error', (_e, p, err) => console.log('[preload-error]', err));
@@ -59,13 +62,18 @@ ipcMain.handle('data:load', async (_e, name) => {
   }
 });
 
-ipcMain.handle('data:save', async (_e, name, obj) => {
-  await fs.mkdir(DATA_DIR, { recursive: true });
+ipcMain.handle('data:save', (_e, name, obj) => {
   const file = dataPath(name);
-  const tmp = file + '.tmp';
-  await fs.writeFile(tmp, JSON.stringify(obj, null, 2), 'utf8');
-  await fs.rename(tmp, file);
-  return true;
+  const prev = saveQueues.get(file) || Promise.resolve();
+  const next = prev.catch(() => {}).then(async () => {
+    await fs.mkdir(DATA_DIR, { recursive: true });
+    const tmp = file + '.tmp';
+    await fs.writeFile(tmp, JSON.stringify(obj, null, 2), 'utf8');
+    await fs.rename(tmp, file);
+    return true;
+  });
+  saveQueues.set(file, next);
+  return next;
 });
 
 ipcMain.handle('scan', async (_e, roots) => scanAll(roots));
@@ -76,7 +84,14 @@ ipcMain.handle('pick-folder', async () => {
 });
 
 ipcMain.handle('open-path', async (_e, p) => {
-  await shell.openPath(p);
+  if (typeof p !== 'string' || !path.isAbsolute(p)) return '';
+  try {
+    const st = await fs.stat(p);
+    if (!st.isDirectory()) return '';
+    return await shell.openPath(p);
+  } catch {
+    return '';
+  }
 });
 
 ipcMain.handle('always-on-top', (_e, flag) => {
@@ -85,16 +100,30 @@ ipcMain.handle('always-on-top', (_e, flag) => {
 });
 
 // 作業中はDAWの横に置ける小さな窓にする
+const COMPACT_W = 340;
+const COMPACT_H = 230;
 ipcMain.handle('compact', (_e, flag) => {
-  if (flag) {
+  const next = !!flag;
+  if (next === isCompact) return next;
+  isCompact = next;
+  if (next) {
+    wasMaximized = win.isMaximized();
+    if (wasMaximized) win.unmaximize();
     normalBounds = win.getBounds();
+    const area = screen.getDisplayMatching(normalBounds).workArea;
+    const x = Math.min(Math.max(normalBounds.x + normalBounds.width - COMPACT_W, area.x), area.x + area.width - COMPACT_W);
+    const y = Math.min(Math.max(normalBounds.y, area.y), area.y + area.height - COMPACT_H);
     win.setAlwaysOnTop(true, 'floating');
-    win.setBounds({ width: 340, height: 230, x: normalBounds.x + normalBounds.width - 340, y: normalBounds.y });
+    win.setBounds({ width: COMPACT_W, height: COMPACT_H, x, y });
   } else {
     win.setAlwaysOnTop(false);
     if (normalBounds) win.setBounds(normalBounds);
+    if (wasMaximized) {
+      win.maximize();
+      wasMaximized = false;
+    }
   }
-  return flag;
+  return next;
 });
 
 // 2つ目を起動しようとしたら、開いている窓を前に出す

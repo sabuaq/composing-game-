@@ -90,6 +90,7 @@ const I18N = {
     'lib.noPacks': 'サンプルパックがありません。設定タブでサンプルフォルダを追加して再スキャンしてください。',
     'lib.guessBadge': '推定',
     'lib.loaded': 'プラグイン{p}個・パック{k}個を読み込みました',
+    'lib.scanError': 'スキャンに失敗しました',
 
     'hist.res.clear': 'クリア', 'hist.res.overtime': '時間オーバー', 'hist.res.giveup': 'ギブアップ',
     'hist.tries': '挑戦', 'hist.done': '完成', 'hist.clears': '時間内クリア', 'hist.avg': '平均★', 'hist.total': '合計時間',
@@ -195,6 +196,7 @@ const I18N = {
     'lib.noPacks': 'No sample packs. Add a sample folder in Settings and rescan.',
     'lib.guessBadge': 'guessed',
     'lib.loaded': 'Loaded {p} plugins and {k} packs',
+    'lib.scanError': 'Scan failed',
 
     'hist.res.clear': 'Clear', 'hist.res.overtime': 'Over time', 'hist.res.giveup': 'Gave up',
     'hist.tries': 'Tries', 'hist.done': 'Finished', 'hist.clears': 'In time', 'hist.avg': 'Avg ★', 'hist.total': 'Total time',

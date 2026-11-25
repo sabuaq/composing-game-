@@ -18,11 +18,21 @@ const game = {
 };
 
 // ---------- 保存 ----------
-let saveTimer;
+let saveTimer = null;
+function flushSettings() {
+  if (!saveTimer || !settings) return;
+  clearTimeout(saveTimer);
+  saveTimer = null;
+  window.api.save('settings', settings);
+}
 function saveSettings() {
   clearTimeout(saveTimer);
-  saveTimer = setTimeout(() => window.api.save('settings', settings), 300);
+  saveTimer = setTimeout(() => {
+    saveTimer = null;
+    window.api.save('settings', settings);
+  }, 300);
 }
+window.addEventListener('beforeunload', flushSettings);
 
 function toast(msg) {
   const t = $('toast');
@@ -85,7 +95,7 @@ function parseParts() {
 
 function pools() {
   return {
-    pack: library.packs.filter(packOn).map((p) => ({ name: p.name, path: p.path })),
+    pack: library.packs.filter(packOn).map((p) => ({ key: p.key, name: p.name, path: p.path })),
     instrument: library.plugins.filter((p) => pluginOn(p) && pluginType(p) === 'instrument').map((p) => ({ name: p.name })),
     effect: library.plugins.filter((p) => pluginOn(p) && pluginType(p) === 'effect').map((p) => ({ name: p.name, fxType: pluginFx(p) })),
     part: parseParts().map((name) => ({ name })),
@@ -117,24 +127,38 @@ function shuffle(a) {
   return a;
 }
 
+function itemId(kind, it) {
+  if (kind === 'pack' && (it.key || it.path)) return (it.key || it.path).toLowerCase();
+  return it.name;
+}
+
 function recentNames() {
   const set = new Set();
-  history.slice(0, settings.avoidRecent).forEach((h) => h.items.forEach((it) => set.add(it.kind + ':' + it.name)));
+  history.slice(0, settings.avoidRecent).forEach((h) => h.items.forEach((it) => set.add(it.kind + ':' + itemId(it.kind, it))));
   return set;
+}
+
+function isRecent(recent, kind, item) {
+  return recent.has(kind + ':' + itemId(kind, item)) || (kind === 'pack' && recent.has('pack:' + item.name));
 }
 
 // 最近出たものは後回しにして n 個選ぶ
 function pickFrom(kind, pool, n, exclude = new Set()) {
   const recent = recentNames();
-  const cand = shuffle(pool.filter((x) => !exclude.has(x.name)));
-  cand.sort((a, b) => recent.has(kind + ':' + a.name) - recent.has(kind + ':' + b.name));
+  const cand = shuffle(pool.filter((x) => !exclude.has(itemId(kind, x))));
+  cand.sort((a, b) => Number(isRecent(recent, kind, a)) - Number(isRecent(recent, kind, b)));
   return cand.slice(0, n);
+}
+
+function currentLevel() {
+  const lv = Math.min(LEVELS.length, Math.max(1, Number(settings.progress.level) || 1));
+  return LEVELS[lv - 1];
 }
 
 function currentConfig() {
   const r = settings.rules;
   if (r.level) {
-    const L = LEVELS[settings.progress.level - 1];
+    const L = currentLevel();
     return { ...L, level: L.lv };
   }
   return { ...settings.manual, level: null, rerolls: Infinity };
@@ -212,7 +236,7 @@ function drawChallenge() {
     fixedList.forEach((c) => items.push({ kind, name: c.name, path: c.path, fixed: true, ...(kind === 'effect' ? { fxType: fxOfName(c.name) } : {}) }));
     const need = Math.max(0, n - fixedList.length);
     if (!need) continue;
-    const chosen = pickFrom(kind, drawPool(kind, p), need, new Set(fixedList.map((c) => c.name)));
+    const chosen = pickFrom(kind, drawPool(kind, p), need, new Set(fixedList.map((c) => itemId(kind, c))));
     if (chosen.length < need) missing.push(kindName(kind));
     chosen.forEach((c) => items.push({ kind, name: c.name, path: c.path, fxType: c.fxType }));
   }
@@ -243,7 +267,7 @@ function rerollItem(index, free = false) {
       const g = gs[rand(gs.length)];
       next = { kind: 'genre', name: g.name, meta: g };
       const bpm = game.challenge.items.find((x) => x.kind === 'bpm');
-      if (bpm) bpm.name = String(randInt(g.min, g.max));
+      if (bpm && !bpm.fixed) bpm.name = String(randInt(g.min, g.max));
     }
   } else if (it.kind === 'bpm') {
     const g = game.challenge.items.find((x) => x.kind === 'genre')?.meta || { min: 80, max: 170 };
@@ -251,7 +275,7 @@ function rerollItem(index, free = false) {
   } else if (it.kind === 'key') {
     next = randomKey(cfg.modes);
   } else {
-    const used = new Set(game.challenge.items.filter((x) => x.kind === it.kind).map((x) => x.name));
+    const used = new Set(game.challenge.items.filter((x) => x.kind === it.kind).map((x) => itemId(it.kind, x)));
     // 種類ごとの時は同じ種類の中から引き直す
     const pool = it.kind === 'effect' && byType() && it.fxType
       ? pools().effect.filter((e) => e.fxType === it.fxType)
@@ -268,7 +292,11 @@ function rerollItem(index, free = false) {
 // ---------- 今後出さない ----------
 // お題の素材がライブラリのどれかを探す（自分で名前を追加したものは見つからない）
 function libraryEntry(it) {
-  if (it.kind === 'pack') return library.packs.find((p) => p.path === it.path) || library.packs.find((p) => p.name === it.name);
+  if (it.kind === 'pack') {
+    return it.path
+      ? library.packs.find((p) => p.path === it.path)
+      : library.packs.find((p) => p.name === it.name);
+  }
   if (it.kind === 'instrument' || it.kind === 'effect') return library.plugins.find((p) => p.name === it.name);
   return null;
 }
@@ -279,7 +307,7 @@ function excludeItem(index) {
   if (it.kind === 'pack') settings.packOverrides[entry.key] = false;
   else setPluginOverride(entry.key, { enabled: false });
   // 指定に入っていたら外す
-  settings.fixed[it.kind] = settings.fixed[it.kind].filter((c) => c.name !== it.name);
+  settings.fixed[it.kind] = settings.fixed[it.kind].filter((c) => itemId(it.kind, c) !== itemId(it.kind, it));
   it.fixed = false;
   saveSettings();
   // その場で別のものに入れ替える（引き直し回数は使わない）。候補がなければその枠を消す
@@ -297,7 +325,7 @@ function excludeItem(index) {
 function setFixedFromItem(it, on) {
   const f = settings.fixed;
   if (LIST_KINDS.includes(it.kind)) {
-    f[it.kind] = f[it.kind].filter((c) => c.name !== it.name);
+    f[it.kind] = f[it.kind].filter((c) => itemId(it.kind, c) !== itemId(it.kind, it));
     if (on) f[it.kind].push({ name: it.name, path: it.path });
   } else if (it.kind === 'genre') {
     f.genre = on ? it.name : '';
@@ -349,6 +377,7 @@ function pauseTimer() {
 function beep() {
   if (!settings.sound) return;
   const ctx = new AudioContext();
+  if (ctx.state === 'suspended') ctx.resume().catch(() => {});
   [0, 0.25, 0.5].forEach((t, i) => {
     const o = ctx.createOscillator();
     const g = ctx.createGain();
@@ -438,7 +467,7 @@ $('resultDialog').addEventListener('close', () => {
   }
 });
 
-function applyResult(stars, memo) {
+async function applyResult(stars, memo) {
   const { result, elapsedSec } = pendingResult;
   const ch = game.challenge;
   if (settings.rules.record) {
@@ -451,8 +480,8 @@ function applyResult(stars, memo) {
       memo,
       elapsedSec,
       limitMin: ch.minutes,
-      items: ch.items.map(({ kind, name, fixed, fxType, note, mode, goal }) => ({
-        kind, name, ...(fxType ? { fxType } : {}), ...(mode ? { note, mode } : {}), ...(goal ? { goal } : {}), ...(fixed ? { fixed: true } : {}),
+      items: ch.items.map(({ kind, name, path, fixed, fxType, note, mode, goal }) => ({
+        kind, name, ...(path ? { path } : {}), ...(fxType ? { fxType } : {}), ...(mode ? { note, mode } : {}), ...(goal ? { goal } : {}), ...(fixed ? { fixed: true } : {}),
       })),
     });
     window.api.save('history', history);
@@ -469,7 +498,7 @@ function applyResult(stars, memo) {
     saveSettings();
   }
   toast(msg);
-  if (document.body.classList.contains('compact')) setCompact(false);
+  if (document.body.classList.contains('compact')) await setCompact(false);
   game.status = 'idle';
   game.challenge = null;
   renderAll();
@@ -487,7 +516,7 @@ async function setCompact(flag) {
   }
 }
 $('cPause').onclick = pauseTimer;
-$('cDone').onclick = () => { setCompact(false); finish('done'); };
+$('cDone').onclick = async () => { await setCompact(false); finish('done'); };
 $('cExpand').onclick = () => setCompact(false);
 
 // ---------- 描画: お題 ----------
@@ -537,7 +566,7 @@ function renderRules() {
   }).join('');
 
   if (r.level) {
-    const L = LEVELS[settings.progress.level - 1];
+    const L = currentLevel();
     $('countHint').textContent = t('level.hint', {
       lv: L.lv, time: r.time ? t('level.hintTime', { min: L.minutes }) : '', goal: goalLabel(L.goal),
       rerolls: L.rerolls, modes: L.modes ? t('level.hintModes') : '',
@@ -675,10 +704,14 @@ $('fixedList').addEventListener('click', (e) => {
 // 一覧から選ぶダイアログ
 let pickKind = null;
 let pickSelected = new Map();
+let pickCandidates = new Map();
 
 function openPicker(kind) {
   pickKind = kind;
-  pickSelected = new Map(settings.fixed[kind].map((c) => [c.name, c]));
+  pickSelected = new Map(settings.fixed[kind].map((c) => [itemId(kind, c), c]));
+  pickCandidates = new Map(
+    settings.fixed[kind].concat(pools()[kind]).map((c) => [itemId(kind, c), c]),
+  );
   $('pickTitle').textContent = t('pick.title', { kind: kindName(kind) });
   $('pickSearch').value = '';
   renderPicker();
@@ -689,16 +722,24 @@ function openPicker(kind) {
 function renderPicker() {
   const q = $('pickSearch').value.trim();
   const ql = q.toLowerCase();
+  const pid = (c) => itemId(pickKind, c);
   const pool = pools()[pickKind];
-  const all = [...pickSelected.values()].filter((c) => !pool.some((p) => p.name === c.name)).concat(pool);
+  const all = [...pickSelected.values()].filter((c) => !pool.some((p) => pid(p) === pid(c))).concat(pool);
+  all.forEach((c) => pickCandidates.set(pid(c), c));
   const rows = all.filter((c) => !ql || c.name.toLowerCase().includes(ql)).slice(0, 400);
+  const dupNames = new Set();
+  const seenNames = new Set();
+  for (const r of rows) {
+    if (seenNames.has(r.name)) dupNames.add(r.name);
+    seenNames.add(r.name);
+  }
   let html = '';
   if (q && !all.some((c) => c.name === q)) {
     html += `<button type="button" class="pick-add" data-add="${esc(q)}">${esc(t('pick.add', { name: q }))}</button>`;
   }
   html += rows.map((c) => `
-    <label class="pick-row"><input type="checkbox" data-pick="${esc(c.name)}" ${pickSelected.has(c.name) ? 'checked' : ''}>
-      <span>${esc(c.name)}</span></label>`).join('');
+    <label class="pick-row"><input type="checkbox" data-pick="${esc(pid(c))}" ${pickSelected.has(pid(c)) ? 'checked' : ''}>
+      <span>${esc(c.name)}${c.path && dupNames.has(c.name) ? ` <small class="hint">${esc(c.path)}</small>` : ''}</span></label>`).join('');
   if (!rows.length && !q) html += `<p class="hint">${t('pick.none')}</p>`;
   $('pickList').innerHTML = html;
   $('pickCount').textContent = t('pick.count', { n: pickSelected.size });
@@ -707,20 +748,21 @@ function renderPicker() {
 $('pickSearch').oninput = renderPicker;
 $('pickSearch').onkeydown = (e) => { if (e.key === 'Enter') e.preventDefault(); };
 $('pickList').addEventListener('change', (e) => {
-  const name = e.target.dataset.pick;
-  if (name === undefined) return;
+  const id = e.target.dataset.pick;
+  if (id === undefined) return;
   if (e.target.checked) {
-    const c = pools()[pickKind].find((p) => p.name === name) || { name };
-    pickSelected.set(name, { name: c.name, ...(c.path ? { path: c.path } : {}) });
+    const c = pickCandidates.get(id) || pools()[pickKind].find((p) => itemId(pickKind, p) === id) || { name: id };
+    pickSelected.set(id, { name: c.name, ...(c.path ? { path: c.path } : {}) });
   } else {
-    pickSelected.delete(name);
+    pickSelected.delete(id);
   }
   $('pickCount').textContent = t('pick.count', { n: pickSelected.size });
 });
 $('pickList').addEventListener('click', (e) => {
   const add = e.target.closest('[data-add]');
   if (!add) return;
-  pickSelected.set(add.dataset.add, { name: add.dataset.add });
+  const name = add.dataset.add;
+  pickSelected.set(itemId(pickKind, { name }), { name });
   $('pickSearch').value = '';
   renderPicker();
 });
@@ -796,10 +838,10 @@ $('actions').addEventListener('click', (e) => {
 
 function renderLevel() {
   const pr = settings.progress;
-  const L = LEVELS[pr.level - 1];
-  const rest = settings.clearsToLevelUp - pr.clears;
+  const L = currentLevel();
+  const rest = Math.max(1, settings.clearsToLevelUp - pr.clears);
   $('levelBadge').innerHTML = settings.rules.level
-    ? `<b>Lv${L.lv}</b> ${esc(levelName(L.lv))} <span class="hint">${pr.level < LEVELS.length ? t('level.next', { n: rest }) : t('level.max')}</span>`
+    ? `<b>Lv${L.lv}</b> ${esc(levelName(L.lv))} <span class="hint">${L.lv < LEVELS.length ? t('level.next', { n: rest }) : t('level.max')}</span>`
     : `<span class="hint">${t('level.off')}</span>`;
 }
 
@@ -867,13 +909,22 @@ function setPluginOverride(key, patch) {
 }
 
 $('libTable').addEventListener('change', (e) => {
-  const t = e.target;
-  if (t.dataset.plugin) setPluginOverride(t.dataset.plugin, { enabled: t.checked });
-  else if (t.dataset.ptype) setPluginOverride(t.dataset.ptype, { type: t.value });
-  else if (t.dataset.pfx) setPluginOverride(t.dataset.pfx, { fx: t.value });
-  else if (t.dataset.pack) settings.packOverrides[t.dataset.pack] = t.checked;
+  const el = e.target;
+  const wrap = $('libTable').parentElement;
+  const scrollTop = wrap ? wrap.scrollTop : 0;
+  const focusAttr = ['plugin', 'ptype', 'pfx', 'pack'].find((a) => el.dataset[a] !== undefined);
+  const focusVal = focusAttr ? el.dataset[focusAttr] : null;
+  if (el.dataset.plugin) setPluginOverride(el.dataset.plugin, { enabled: el.checked });
+  else if (el.dataset.ptype) setPluginOverride(el.dataset.ptype, { type: el.value });
+  else if (el.dataset.pfx) setPluginOverride(el.dataset.pfx, { fx: el.value });
+  else if (el.dataset.pack) settings.packOverrides[el.dataset.pack] = el.checked;
   saveSettings();
   renderLibrary();
+  if (wrap) wrap.scrollTop = scrollTop;
+  if (focusAttr && focusVal !== null) {
+    const next = $('libTable').querySelector(`[data-${focusAttr}="${CSS.escape(focusVal)}"]`);
+    if (next) next.focus({ preventScroll: true });
+  }
 });
 $('libTable').addEventListener('click', (e) => {
   const b = e.target.closest('[data-openpath]');
@@ -904,6 +955,9 @@ async function rescan() {
     library = await window.api.scan({ vstRoots: settings.vstRoots, sampleRoots: settings.sampleRoots });
     await window.api.save('library', library);
     toast(t('lib.loaded', { p: library.plugins.length, k: library.packs.length }));
+  } catch (err) {
+    console.error(err);
+    toast(t('lib.scanError'));
   } finally {
     $('rescanBtn').disabled = false;
     $('rescanBtn').textContent = t('lib.rescan');
