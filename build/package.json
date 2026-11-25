@@ -1,7 +1,7 @@
 {
   "name": "composing-practice-game",
   "productName": "Composing Practice Game",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "A composing practice game that draws challenges from your own samples and plugins",
   "author": "sabuaq",
   "license": "MIT",
